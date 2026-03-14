@@ -12,40 +12,37 @@ CheapClaw is a multi-bot orchestration app built on top of the `infiagent` SDK.
 
 ## Introduction
 
-CheapClaw started from a very practical feeling: watching an OpenClaw token bill hurt.
+CheapClaw started from a simple feeling: watching my own OpenClaw token bill hurt.
 
-The goal of CheapClaw is to keep most of the useful capabilities of OpenClaw, extend some of them, and improve how the same underlying models behave on complex tasks so the total system becomes cheaper in practice.
+Because of that, CheapClaw aims to preserve most of OpenClaw's useful capabilities while extending some of them and improving how the same models handle complex problems, which in practice means lower cost.
 
-The most important difference is mixed strong-model and weak-model execution inside a single agent loop. In OpenClaw, you can already split work across different bots, letting a stronger model plan and a weaker model execute. But the execution bot has a real weakness: if the task stops unfolding the way the plan expected, the weaker model often collapses.
+The main difference is mixed strong-model and weak-model execution inside a single agent loop. In OpenClaw, you can already rely on different bots, letting a stronger model bot plan and a weaker execution bot carry out the work. But the execution bot has a real weakness: if progress during execution does not match the original plan, the weaker model often collapses.
 
-CheapClaw leans on the characteristics of the `infiagent` SDK instead. Within one agent loop, it thinks in stages and periodically truncates earlier conversation history, for example every 10 or 20 steps. That gives smaller models a much shorter working context while also letting stronger-model planning be corrected continuously in real time.
+By leaning on the characteristics of the infiagent SDK, CheapClaw lets a single agent loop think in stages and periodically cut away the full earlier conversation history, for example every 10 or 20 steps. This keeps smaller models working in a shorter context window while also providing continuously corrected plans from stronger models.
 
-So while replying to “hello” still goes through a fairly heavy pipeline, just like OpenClaw, the benefit shows up on more complex tasks such as:
+So even though replying to something as simple as “hello” still goes through a fairly heavy workflow, just like OpenClaw, once you start assigning more complex tasks such as:
 
-- summarizing 500 PDFs from a list into a structured table
-- producing an EV research report with 100+ pages
+- “summarize 500 PDFs from a list into one table”
+- “complete an EV research report of at least 100 pages”
 
-On tasks like these, this fine-grained mixed execution pattern can save a meaningful amount of money.
+this kind of fine-grained mixed execution can save you a meaningful amount of money.
 
-CheapClaw also adds several features that make vertical or domain-specific work more stable:
+## Core Capabilities
 
-- In addition to skills, you can attach complete agent systems to a bot. CheapClaw supports custom single-agent or multi-agent systems, as well as custom tools, so you can use your own or other people’s domain-specific agent systems for work such as scientific research or academic writing.
-- Memory is fully layered. The bot’s supervisor only maintains user interaction memory, while the worker-side agent systems only maintain memory that belongs to the same task type. They do not get polluted by unrelated task noise.
-- Users can build their own agent systems from configuration files based on the infiagent project conventions and add them to a bot. Do not enable the built-in `human_in_loop` tool for those agent systems.
+- Connects to Feishu, Telegram, and web chat, which are already tested, and also supports WhatsApp and Discord.
+- Supports multiple bots and bot customization. You can also write `system-add.md` inside a bot runtime directory to give that bot additional role instructions and prompt guidance.
+- Supports skills and multi-stage skill reveal.
+
+## Additional Capabilities
+
+CheapClaw also supports a number of extra features that let users improve stability for vertical or domain-specific tasks:
+
+- In addition to skills, you can attach complete agent systems to a bot. It supports custom single-agent or multi-agent systems and custom tools, allowing you to rely on your own or third-party domain-specific agents to complete complex tasks more reliably, such as scientific research or academic writing. See the documentation for usage details.
+- Memory is fully layered. The bot's supervisor only maintains user interaction memory, while the dispatched sub-agent systems only maintain memory that belongs to similar work under the same task, without being polluted by unrelated task noise.
+- Users can build their own agent systems by editing configuration files according to the infiagent project conventions, then add them under a specific bot. Do not use the built-in `human_in_loop` tool inside those agent systems.
+- At the last layer of the agent system, different sub-agents can independently configure their thinking model, execution model, image reading model, compression model, and more.
 
 ![CheapClaw framework](assets/framework.png)
-
-## What CheapClaw Does
-
-- Runs one or more bots on top of a shared LLM config.
-- Lets you start from built-in web chat, then add social channels later.
-- Routes new user messages intelligently:
-  - direct reply
-  - continue an old `task_id`
-  - append to a running task
-  - start a new task branch
-- Supports custom agent systems installed as zip packages.
-- Includes a built-in dashboard for configuration, monitoring, local chat, and group chat.
 
 ## Install
 
@@ -65,20 +62,20 @@ python -m pip install -U -e .
 
 ## Quick Start
 
-### Option A: the normal first-time setup
+### Option A: normal first-time setup
 
 ```bash
 cheapclaw config --interactive
 cheapclaw up
 ```
 
-Open the dashboard:
+Then open:
 
 ```text
 http://127.0.0.1:8787/dashboard
 ```
 
-### Option B: create a template first
+### Option B: create the template first
 
 ```bash
 cheapclaw init
@@ -86,17 +83,17 @@ cheapclaw config --interactive
 cheapclaw up
 ```
 
-`cheapclaw init` creates the default manifest template if it does not exist.
+`cheapclaw init` creates `fleet.manifest.json` in the default location.
 
 ## Default Paths
 
-By default, CheapClaw stores runtime files under:
+By default, CheapClaw stores its runtime files under:
 
 ```text
 ~/cheapclaw
 ```
 
-The most important default paths are:
+The most important paths are:
 
 ```text
 ~/cheapclaw/fleet.manifest.json
@@ -104,60 +101,70 @@ The most important default paths are:
 ~/cheapclaw/runtime/config/llm_config.yaml
 ```
 
-Most CLI commands use that default manifest automatically, so you usually do not need to pass `--manifest`.
+Most CLI commands automatically use this default manifest, so you usually do not need to pass `--manifest` manually.
 
 ## If You Only Have One API Key and One Base URL
 
-That is enough.
+That is already enough.
 
-During `cheapclaw config --interactive`, fill:
+In `cheapclaw config --interactive`, fill:
 
 - `llm.base_url`
 - `llm.api_key`
 - `llm.model`
 
-CheapClaw writes one shared LLM config file and all bots use it by default.
+CheapClaw will generate a shared `llm_config.yaml`, and all bots use it by default.
 
-For InfiAgent-style model ids, it is best to enter the full model id explicitly.
+### How to fill `llm.model`
 
-Examples:
+This part is easy to misunderstand, so here is the direct rule:
 
-- `openai/gpt-4o`
-- `openai/google/gemini-3-flash-preview`
-- in some deployments, `openrouter/openai/gpt-4o`
+Use your model's API format prefix plus the model name provided by the service vendor.
 
-Interactive setup only auto-adds `openai/` when you enter a bare model name such as `gpt-4o`. If your value already contains a prefix, CheapClaw keeps it unchanged.
+For example, for `openai/gpt-4o` on OpenRouter, because that provider supports both OpenAI-format and OpenRouter-format calling styles, the model name may be written as:
 
-## Recommended First Run Flow
+- `openai/openai/gpt-4o`
+- `openrouter/openai/gpt-4o`
 
-If this is your first deployment, the smoothest path is:
+In other words, you usually need to put the API-format prefix in front of the model name.
 
-1. Configure one `localweb` bot first.
-2. Start CheapClaw.
-3. Open the dashboard and confirm local web chat works.
-4. Add Telegram or Feishu only after localweb is stable.
+The default config examples use `gemini-3-flash`. You can keep the thinking model unchanged and swap other model slots to smaller models to save money. You can also mix local and cloud models. See the infiagent repository for details.
 
-This avoids debugging credentials, proxies, and channel permissions at the same time.
+## Recommended First-Time Path
+
+If this is your first CheapClaw deployment, the safest path is:
+
+1. Create one `localweb` bot first
+2. Start CheapClaw
+3. Open the dashboard and verify that web chat replies normally
+4. Only then connect Telegram or Feishu
+
+This avoids debugging all of these at once:
+
+- LLM config
+- channel credentials
+- network proxy
+- platform permissions
 
 ## Dashboard
 
-The built-in dashboard is available at:
+The built-in control console is available at:
 
 ```text
 http://127.0.0.1:8787/dashboard
 ```
 
-From there you can:
+From this page you can:
 
 - view all bots
-- inspect running state
-- edit fleet configuration
+- check running status
+- edit fleet config
 - use local web chat
-- create multi-bot local group conversations
-- inspect history
-- operate CheapClaw without hand-editing runtime files
+- create multi-bot group chats
+- read conversation history
+- manage runtime state without editing files by hand
 
-### Exposing the dashboard on a server
+### Expose the dashboard on a server
 
 If you want LAN or remote access:
 
@@ -165,7 +172,7 @@ If you want LAN or remote access:
 cheapclaw up --web-host 0.0.0.0 --web-port 8787
 ```
 
-Then open:
+Then access:
 
 ```text
 http://<server-ip>:8787/dashboard
@@ -175,11 +182,18 @@ http://<server-ip>:8787/dashboard
 
 ![CheapClaw dashboard](assets/web_shot.png)
 
-This screenshot shows the web console after installing an extra custom agent system by CLI, so the bot can orchestrate more than the built-in systems.
+This screenshot shows a bot whose orchestration capability expanded from the built-in systems to more systems after installing an extra custom agent system through the CLI.
+
+```bash
+cheapclaw bot-agent-system add "/path/to/agent_system.zip" --bot-id bot_1 --reload-after
+```
 
 ## Adding Bots
 
-You can add bots either from the dashboard or from the CLI.
+You can add bots in two ways:
+
+- Dashboard
+- CLI
 
 ### Add a bot from the CLI
 
@@ -187,13 +201,13 @@ You can add bots either from the dashboard or from the CLI.
 cheapclaw add-bot
 ```
 
-The command is interactive and will ask for:
+This command is interactive and will ask for:
 
 - bot id
 - display name
 - channel type
 - credentials
-- whether to start the bot immediately
+- whether to start immediately
 
 ### Manage a single bot
 
@@ -203,7 +217,7 @@ cheapclaw stop-bot --bot-id bot_1
 cheapclaw reload-bot --bot-id bot_1 --prepare-first
 ```
 
-### Inspect bots
+### View bot status
 
 ```bash
 cheapclaw list-bots
@@ -212,77 +226,82 @@ cheapclaw status --bot-id bot_1
 cheapclaw logs --bot-id bot_1
 ```
 
-## Local Web Chat
+## Local Web Chat (`localweb`)
 
-`localweb` is the easiest channel because it needs no third-party credentials.
+`localweb` is the best first testing channel because it does not require any third-party credentials.
 
-It is useful for:
+Good use cases:
 
-- first-run verification
+- first validation
+- local debugging
 - demos
-- local testing
 - multi-bot group chat experiments
 
-In local web group chats:
+In localweb group chat:
 
-- you can include multiple localweb bots
-- `@bot_id` routes the message to the mentioned bot
-- if a message mentions one or more bots, only the mentioned bots are triggered
+- you can place multiple localweb bots into one conversation
+- `@bot_id` routes the message to the corresponding bot
+- if a message mentions one or more bots, only the mentioned bots will be triggered
 
 ## Connecting Telegram
 
-To add a Telegram bot, prepare:
+Prepare:
 
 - a BotFather bot token
-- optional allowed chat ids if you want to restrict usage
+- optional `allowed_chats`
 
-During `cheapclaw config --interactive` or `cheapclaw add-bot`:
+Inside `cheapclaw config --interactive` or `cheapclaw add-bot`:
 
-- choose channel `telegram`
+- choose `telegram`
 - fill `telegram.bot_token`
-- optionally fill `telegram.allowed_chats`
+- if needed, fill `telegram.allowed_chats`
 
-Start the bot:
+Start it:
 
 ```bash
 cheapclaw start-bot --bot-id telegram_bot_1 --prepare-first
 ```
 
-If Telegram returns `404` on `getUpdates`, the token is invalid or malformed.
+If Telegram polling returns `404 getUpdates`, that usually means the token is wrong or malformed.
 
 ## Connecting Feishu
 
-To add a Feishu bot, prepare:
+Prepare:
 
 - `app_id`
 - `app_secret`
 
 During setup:
 
-- choose channel `feishu`
+- choose `feishu`
 - fill `feishu.app_id`
 - fill `feishu.app_secret`
 
 CheapClaw uses Feishu long connection mode by default.
 
-If your environment uses a SOCKS proxy, make sure the environment actually intends to use it. CheapClaw uses explicit proxy settings from its manifest-configured environment, and current releases ship with `python-socks`.
+If your environment uses a proxy, make sure CheapClaw is actually reading the proxy configuration you intend it to use.
 
 ## Other Channels
 
-CheapClaw also has support for:
+Current support also includes:
 
 - Discord
 - WhatsApp Cloud API
 - QQ through OneBot v11 bridge
 - WeChat through OneBot v11 bridge
 
-For most users, it is still best to validate `localweb`, then Telegram or Feishu, before adding bridge-based channels.
+For most users, it is still best to validate:
+
+1. `localweb`
+2. Telegram or Feishu
+
+before adding bridge-based channels.
 
 ## Installing a Custom Agent System
 
-CheapClaw can install a full agent system from a zip archive.
+CheapClaw supports installing a complete agent system as a zip package.
 
-Install to one bot:
+Install into a single bot:
 
 ```bash
 cheapclaw bot-agent-system add "/path/to/agent_system.zip" --bot-id bot_1
@@ -294,7 +313,7 @@ Install and reload immediately:
 cheapclaw bot-agent-system add "/path/to/agent_system.zip" --bot-id bot_1 --reload-after
 ```
 
-Install globally into shared project assets:
+Install into global shared assets:
 
 ```bash
 cheapclaw bot-agent-system add "/path/to/agent_system.zip" --global
@@ -303,12 +322,12 @@ cheapclaw bot-agent-system add "/path/to/agent_system.zip" --global
 Notes:
 
 - `--bot-id` installs only into that bot runtime
-- `--reload-after` restarts the target bot so the new system is visible immediately
-- runtime-installed systems are preserved across normal prepare and reload flows
+- `--reload-after` restarts that bot immediately so the new system becomes visible
+- runtime-installed systems are preserved during normal `prepare / reload` flows and are not automatically deleted
 
 ## Common Commands
 
-### Main lifecycle
+### Main flow
 
 ```bash
 cheapclaw init
@@ -319,7 +338,7 @@ cheapclaw stop
 cheapclaw restart
 ```
 
-### Per-bot control
+### Single-bot control
 
 ```bash
 cheapclaw add-bot
@@ -353,33 +372,33 @@ cheapclaw bot-agent-system add "/path/to/agent_system.zip" --bot-id bot_1 --relo
 cheapclaw bot-agent-system add "/path/to/agent_system.zip" --global
 ```
 
-## Cases
+## Use Cases
 
-### Mobile chat: Feishu + Telegram
+### Mobile access: Feishu + Telegram
 
-The two screenshots below show CheapClaw connected to mobile chat surfaces.
+The two screenshots below show CheapClaw connected to mobile chat channels.
 
 | Feishu | Telegram |
 |---|---|
 | ![CheapClaw on Feishu](assets/screenshot.jpg) | ![CheapClaw on Telegram](assets/screenshot_2_telegram.jpg) |
 
-This is a practical deployment pattern:
+This is a very practical deployment shape:
 
-- keep orchestration on your server
-- keep user interaction in familiar messaging apps
-- let the supervisor decide when to reuse or branch work
+- orchestration logic runs on your server
+- users still interact through familiar messaging apps
+- the supervisor decides whether to reuse an old task or open a new branch
 
-### Dashboard + expanding agent systems
+### Web console + expanding agent systems
 
 ![CheapClaw web console](assets/web_shot.png)
 
-This case shows a bot that started with built-in orchestration systems, then gained a third system after a CLI install.
+This case shows a bot that originally had only built-in systems, then gained more orchestration capability after an extra system was installed through the CLI.
 
-## Notes and Operational Advice
+## Notes
 
-### Watchdog defaults
+### 1. Watchdog is low-frequency by default
 
-CheapClaw now defaults to:
+The current default is:
 
 ```text
 watchdog_interval_sec = 86400
@@ -387,50 +406,50 @@ watchdog_interval_sec = 86400
 
 That is 24 hours.
 
-This keeps maintenance noise low by default. If you want a shorter interval, edit the bot runtime config after initialization:
+This reduces maintenance noise. If you really need a shorter interval, change it after initialization in:
 
 ```text
 ~/cheapclaw/runtime/<bot_id>/cheapclaw/config/app_config.json
 ```
 
-### `system-add.md`
+### 2. `system-add.md` is now coexistence-friendly
 
-CheapClaw updates only its own reserved block inside `system-add.md`.
+CheapClaw only updates its own reserved block inside `system-add.md`.
 
-That means:
+So now:
 
-- you can keep your own short notes outside the reserved block
-- an agent can also keep short preference or experience notes there
-- CheapClaw will not replace the whole file
+- you can write your own prompts outside the reserved block
+- agents can also record short experience and user preferences there
+- CheapClaw will not overwrite the entire file
 
-### Stop before deleting runtime files
+### 3. Stop services before deleting runtime files
 
-Always stop services first:
+Run:
 
 ```bash
 cheapclaw stop
 ```
 
-Then edit or remove runtime files if you really need to.
+before deleting runtime directories or editing files inside them.
 
-### Agent systems are runtime-visible, not auto-injected
+### 4. Agent system visibility is runtime-based
 
-CheapClaw only exposes the agent systems that actually exist in the current bot runtime.
+CheapClaw only exposes the agent systems that actually exist inside the current bot runtime.
 
 That means:
 
-- built-in `infiagent` agent systems are not auto-injected into CheapClaw bots
-- a bot only sees the systems you explicitly prepared or installed for it
+- built-in `infiagent` systems are not auto-injected
+- a bot only sees the systems you explicitly prepared or installed
 
-### Start with `localweb` when something feels off
+### 5. When something goes wrong, return to `localweb`
 
 If a social channel is not responding, first verify:
 
-- the dashboard is reachable
-- a localweb bot can reply
-- the shared LLM config is valid
+- the dashboard opens
+- the localweb bot can reply
+- the LLM config is valid
 
-Then move on to Telegram or Feishu credentials.
+Then continue debugging Telegram or Feishu.
 
 ## Repository Layout
 
@@ -441,11 +460,12 @@ scripts/                   CLI and dashboard startup logic
 tools_library/             CheapClaw runtime tools
 web/                       dashboard frontend files
 cheapclaw_service.py       main service loop
-README.md                  this guide
+README.md                  English guide
+README.zh-CN.md            Chinese guide
 ```
 
-## Extra Documentation
+## Additional Documentation
 
-- [Simplified Chinese README](README.zh-CN.md)
+- [English README](README.md)
 - [Chinese CLI tutorial](docs/CHEAPCLAW_CLI_TUTORIAL_ZH.md)
 - [SDK guide](SDK_GUIDE.md)
