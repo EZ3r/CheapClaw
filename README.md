@@ -45,7 +45,7 @@ CheapClaw also supports a number of extra features that let users improve stabil
 
 - In addition to skills, you can attach complete agent systems to a bot. CheapClaw supports custom single-agent or multi-agent systems and custom tools, so you can rely on your own or third-party domain-specific agents to complete complex tasks more reliably, such as scientific research or academic writing. For the overall agent-system layout, you can also refer to the [infiAgent](https://github.com/polyuiislab/infiAgent) repository. Do not directly install agent systems from unreviewed external sources; before using one, make sure it does not include tools such as `human_in_loop`, which can block background execution completely.
 - Memory is fully layered. The bot's supervisor only maintains user interaction memory, while the dispatched sub-agent systems only maintain memory that belongs to similar work under the same task, without being polluted by unrelated task noise.
-- Users can build their own agent systems by editing configuration files according to the infiagent project conventions, then add them under a specific bot. Do not use the built-in `human_in_loop` tool inside those agent systems.
+- Users can build their own agent systems by editing configuration files according to the infiagent project conventions, then add them under a specific bot.
 - At the last layer of the agent system, different sub-agents can independently configure their thinking model, execution model, image reading model, compression model, and more.
 
 ![CheapClaw framework](assets/framework.png)
