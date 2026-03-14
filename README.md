@@ -396,8 +396,6 @@ This is a very practical deployment shape:
 
 ### Web console + expanding agent systems
 
-![CheapClaw web console](assets/web_shot.png)
-
 This case shows a bot that originally had only built-in systems, then gained more orchestration capability after an extra system was installed through the CLI.
 
 ## Notes
