@@ -6,6 +6,12 @@
   English | <a href="README.zh-CN.md">简体中文</a>
 </p>
 
+<p align="center">
+  <a href="https://pypi.org/project/cheapclaw/"><img src="https://img.shields.io/pypi/v/cheapclaw" alt="PyPI"></a>
+  <a href="https://pypi.org/project/cheapclaw/"><img src="https://img.shields.io/pypi/pyversions/cheapclaw" alt="Python"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
+</p>
+
 # CheapClaw
 
 CheapClaw is a multi-bot orchestration app built on top of the `infiagent` SDK.
