@@ -20,18 +20,18 @@ CheapClaw is a multi-bot orchestration app built on top of the `infiagent` SDK.
 
 CheapClaw started from a simple feeling: watching my own OpenClaw token bill hurt.
 
-Because of that, CheapClaw aims to preserve most of OpenClaw's useful capabilities while extending some of them and improving how the same models handle complex problems, which in practice means lower cost.
+At the same time, most people just want to try OpenClaw rather than use it heavily in practice. So the goal of CheapClaw is **not** to minimize code volume, nor to reproduce OpenClaw across every possible scenario. Instead, CheapClaw aims to preserve most of OpenClaw’s functionality, extend some of its capabilities, and improve how the same models handle complex tasks more cost-effectively.
 
-The main difference is mixed strong-model and weak-model execution inside a single agent loop. In OpenClaw, you can already rely on different bots, letting a stronger model bot plan and a weaker execution bot carry out the work. But the execution bot has a real weakness: if progress during execution does not match the original plan, the weaker model often collapses.
+The main difference lies in **mixed execution of strong and weak models within a single agent loop**. In OpenClaw, you can already rely on different bots: a stronger-model bot can make the plan, and a weaker execution bot can carry it out. However, the execution bot has a real weakness: if the actual progress during execution does not follow the original plan as expected, the weaker model often collapses.
 
-By leaning on the characteristics of the infiagent SDK, CheapClaw lets a single agent loop think in stages and periodically cut away the full earlier conversation history, for example every 10 or 20 steps. This keeps smaller models working in a shorter context window while also providing continuously corrected plans from stronger models.
+Leveraging the characteristics of the InfiAgent SDK, CheapClaw allows a single agent loop to think in stages and directly cut away the entire earlier conversation history at intervals, such as every 10 or 20 steps. This not only keeps smaller models operating within a shorter context window, but also provides continuously updated plans from stronger models in time.
 
-So even though replying to something as simple as “hello” still goes through a fairly heavy workflow, just like OpenClaw, once you start assigning more complex tasks such as:
+So although even replying to something as simple as “hello” still goes through a relatively heavy workflow—just like OpenClaw—CheapClaw becomes much more worthwhile once you start assigning more complex tasks, such as:
 
 - “summarize 500 PDFs from a list into one table”
 - “complete an EV research report of at least 100 pages”
 
-this kind of fine-grained mixed execution can save you a meaningful amount of money.
+For this kind of task, fine-grained mixed execution can save you a meaningful amount of money.
 
 ## Core Capabilities
 
