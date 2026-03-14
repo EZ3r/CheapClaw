@@ -1,0 +1,12 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+build/
+dist/
+*.egg-info/
+
+TEST/
+TEST2/
+
+fleet.manifest.json

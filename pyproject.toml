@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cheapclaw"
+version = "1.0.4"
+description = "CheapClaw multi-bot orchestration CLI"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "infiagent>=3.0.1",
+  "requests>=2.31.0",
+  "lark-oapi>=1.4.0",
+  "python-socks>=2.5.3",
+]
+
+[project.scripts]
+cheapclaw = "cheapclaw.scripts.fleet_one_click:main"
+cheapclaw-fleet = "cheapclaw.scripts.fleet_one_click:main"
+cheapclaw-web = "cheapclaw.scripts.fleet_web_console:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["cheapclaw", "cheapclaw.scripts"]
+
+[tool.setuptools.package-dir]
+cheapclaw = "."
+
+[tool.setuptools.package-data]
+cheapclaw = [
+  "assets/agent_library/*/*.yaml",
+  "assets/config/*.json",
+  "assets/config/*.yaml",
+  "web/*.html",
+  "tools_library/*/*.py",
+  "skills/*/SKILL.md",
+  "docs/*.md",
+]

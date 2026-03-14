@@ -1,0 +1,29 @@
+{
+  "llm_config_path": "/ABS/PATH/TO/llm_config.yaml",
+  "runtime_root": "/ABS/PATH/TO/cheapclaw_runtime",
+  "fleet_config_path": "/ABS/PATH/TO/cheapclaw_runtime/fleet.generated.json",
+  "proxy_env": {
+    "http_proxy": "",
+    "https_proxy": "",
+    "all_proxy": ""
+  },
+  "context": {
+    "user_history_compress_threshold_tokens": 1500,
+    "structured_call_info_compress_threshold_agents": 10,
+    "structured_call_info_compress_threshold_tokens": 2200
+  },
+  "bots": [
+    {
+      "bot_id": "local_bot_1",
+      "display_name": "Local Bot 1",
+      "channel": "localweb",
+      "enabled": true,
+      "serve_webhooks": true,
+      "host": "127.0.0.1",
+      "port": 8765,
+      "localweb": {
+        "require_mention_in_group": true
+      }
+    }
+  ]
+}

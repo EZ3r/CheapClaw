@@ -1,0 +1,56 @@
+{
+  "telegram": {
+    "enabled": false,
+    "bot_token": "",
+    "allowed_chats": []
+  },
+  "feishu": {
+    "enabled": false,
+    "mode": "long_connection",
+    "app_id": "",
+    "app_secret": "",
+    "verify_token": "",
+    "encrypt_key": ""
+  },
+  "whatsapp": {
+    "enabled": false,
+    "access_token": "",
+    "phone_number_id": "",
+    "verify_token": "",
+    "api_version": "v21.0"
+  },
+  "discord": {
+    "enabled": false,
+    "bot_id": "",
+    "display_name": "",
+    "bot_token": "",
+    "intents": 37377,
+    "require_mention_in_guild": true
+  },
+  "qq": {
+    "enabled": false,
+    "bot_id": "",
+    "display_name": "",
+    "onebot_api_base": "http://127.0.0.1:5700",
+    "onebot_access_token": "",
+    "onebot_post_secret": "",
+    "onebot_self_id": "",
+    "require_mention_in_group": true
+  },
+  "wechat": {
+    "enabled": false,
+    "bot_id": "",
+    "display_name": "",
+    "onebot_api_base": "http://127.0.0.1:5701",
+    "onebot_access_token": "",
+    "onebot_post_secret": "",
+    "onebot_self_id": "",
+    "require_mention_in_group": true
+  },
+  "localweb": {
+    "enabled": false,
+    "bot_id": "",
+    "display_name": "",
+    "require_mention_in_group": true
+  }
+}

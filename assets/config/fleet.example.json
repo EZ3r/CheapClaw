@@ -1,0 +1,24 @@
+{
+  "bots": [
+    {
+      "bot_id": "feishu_bot_a",
+      "display_name": "Feishu Bot A",
+      "user_data_root": "/abs/path/to/bot_a_root",
+      "llm_config_path": "/abs/path/to/llm_config.yaml",
+      "enabled": true,
+      "serve_webhooks": false,
+      "host": "127.0.0.1",
+      "port": 8765
+    },
+    {
+      "bot_id": "feishu_bot_b",
+      "display_name": "Feishu Bot B",
+      "user_data_root": "/abs/path/to/bot_b_root",
+      "llm_config_path": "/abs/path/to/llm_config.yaml",
+      "enabled": true,
+      "serve_webhooks": false,
+      "host": "127.0.0.1",
+      "port": 8766
+    }
+  ]
+}
