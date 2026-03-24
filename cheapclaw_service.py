@@ -59,6 +59,7 @@ try:
         load_fleet_config,
         load_monitor_instructions_for_root,
         move_outbox_event_to_deadletter,
+        OUTBOX_DEFAULT_MAX_RETRIES,
         load_plans,
         now_iso,
         pending_monitor_instruction_count,
@@ -95,6 +96,7 @@ except ImportError:
         load_fleet_config,
         load_monitor_instructions_for_root,
         move_outbox_event_to_deadletter,
+        OUTBOX_DEFAULT_MAX_RETRIES,
         load_plans,
         now_iso,
         pending_monitor_instruction_count,
@@ -133,6 +135,8 @@ APP_WEB_ROOT = APP_ROOT / "web"
 SERVICE_LOG_PATH: Optional[Path] = None
 SERVICE_LOG_MAX_BYTES = 5 * 1024 * 1024
 SERVICE_LOG_BACKUP_COUNT = 3
+OUTBOX_BASE_BACKOFF_SECONDS = 5
+OUTBOX_MAX_BACKOFF_SECONDS = 300
 LOGGER = logging.getLogger("cheapclaw.service")
 LOGGER.setLevel(logging.INFO)
 LOGGER.propagate = False
@@ -202,6 +206,7 @@ def _configure_service_logger(log_path: Path, *, max_bytes: int, backup_count: i
         file_handler.setFormatter(formatter)
         LOGGER.handlers.clear()
         LOGGER.addHandler(file_handler)
+        # CHEAPCLAW_LOG_STDOUT=0 disables duplicate stdout logs while keeping file logs.
         if str(os.environ.get("CHEAPCLAW_LOG_STDOUT", "1")).strip().lower() not in {"0", "false", "no"}:
             stream_handler = logging.StreamHandler(sys.stdout)
             stream_handler.setFormatter(formatter)
@@ -272,8 +277,14 @@ def _extract_cheapclaw_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
         "default_mcp_servers": [item for item in default_mcp_servers if isinstance(item, dict)],
         "feishu_mode": str(cheapclaw.get("feishu_mode", example_cheapclaw.get("feishu_mode", "long_connection")) or example_cheapclaw.get("feishu_mode", "long_connection")).strip(),
         "service_log_file": str(cheapclaw.get("service_log_file", example_cheapclaw.get("service_log_file", "cheapclaw_service.log")) or example_cheapclaw.get("service_log_file", "cheapclaw_service.log")).strip(),
-        "service_log_max_bytes": max(1024, int(cheapclaw.get("service_log_max_bytes", 5 * 1024 * 1024) or 5 * 1024 * 1024)),
-        "service_log_backup_count": max(1, int(cheapclaw.get("service_log_backup_count", 3) or 3)),
+        "service_log_max_bytes": max(
+            1024,
+            int(cheapclaw.get("service_log_max_bytes", SERVICE_LOG_MAX_BYTES) or SERVICE_LOG_MAX_BYTES),
+        ),
+        "service_log_backup_count": max(
+            1,
+            int(cheapclaw.get("service_log_backup_count", SERVICE_LOG_BACKUP_COUNT) or SERVICE_LOG_BACKUP_COUNT),
+        ),
     }
 
 
@@ -3268,7 +3279,7 @@ class CheapClawService:
             results = []
             for event in list_outbox_events():
                 metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
-                max_retries = max(0, int(metadata.get("max_retries", 8) or 8))
+                max_retries = max(0, int(metadata.get("max_retries", OUTBOX_DEFAULT_MAX_RETRIES) or OUTBOX_DEFAULT_MAX_RETRIES))
                 retry_count = max(0, int(metadata.get("retry_count", 0) or 0))
                 next_retry_at = parse_iso(str(metadata.get("next_retry_at") or ""))
                 now_dt = datetime.now().astimezone()
@@ -3322,7 +3333,11 @@ class CheapClawService:
                             }
                         )
                         continue
-                    backoff_seconds = min(300, 5 * (2 ** max(0, retry_count - 1)))
+                    # Exponential backoff by retry_count=1,2,3... => 5s,10s,20s,40s... capped at 300s.
+                    backoff_seconds = min(
+                        OUTBOX_MAX_BACKOFF_SECONDS,
+                        OUTBOX_BASE_BACKOFF_SECONDS * (2 ** max(0, retry_count - 1)),
+                    )
                     metadata["retry_count"] = retry_count
                     metadata["next_retry_at"] = (now_dt + timedelta(seconds=backoff_seconds)).isoformat(timespec="seconds")
                     event["metadata"] = metadata

@@ -11,6 +11,24 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+OUTBOX_DEFAULT_MAX_RETRIES = 8
+
+
+def _compute_outbox_dedupe_hash(
+    *,
+    channel: str,
+    conversation_id: str,
+    message: str,
+    attachments: List[Dict[str, Any]],
+) -> str:
+    dedupe_basis = {
+        "channel": str(channel or ""),
+        "conversation_id": str(conversation_id or ""),
+        "message": str(message or ""),
+        "attachments": attachments,
+    }
+    return hashlib.sha256(json.dumps(dedupe_basis, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
 
 def now_iso() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -739,11 +757,14 @@ def queue_outbound_message(
     normalized_attachments = attachments or []
     metadata_payload = dict(metadata or {})
     metadata_payload.setdefault("retry_count", 0)
-    metadata_payload.setdefault("max_retries", 8)
+    metadata_payload.setdefault("max_retries", OUTBOX_DEFAULT_MAX_RETRIES)
     metadata_payload.setdefault("next_retry_at", now_iso())
-    dedupe_hash = hashlib.sha256(
-        f"{channel}::{conversation_id}::{normalized_message}::{json.dumps(normalized_attachments, ensure_ascii=False, sort_keys=True)}".encode("utf-8")
-    ).hexdigest()
+    dedupe_hash = _compute_outbox_dedupe_hash(
+        channel=str(channel or ""),
+        conversation_id=str(conversation_id or ""),
+        message=normalized_message,
+        attachments=normalized_attachments,
+    )
     metadata_payload.setdefault("dedupe_hash", dedupe_hash)
 
     for existing in list_outbox_events():
