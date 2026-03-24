@@ -24,6 +24,8 @@
     ],
     "default_mcp_servers": [],
     "feishu_mode": "long_connection",
-    "service_log_file": "cheapclaw_service.log"
+    "service_log_file": "cheapclaw_service.log",
+    "service_log_max_bytes": 5242880,
+    "service_log_backup_count": 3
   }
 }

@@ -1,0 +1,16 @@
+services:
+  cheapclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cheapclaw
+    environment:
+      CHEAPCLAW_USER_DATA_ROOT: /data
+    ports:
+      - "8787:8787"
+    volumes:
+      - cheapclaw_data:/data
+    restart: unless-stopped
+
+volumes:
+  cheapclaw_data:
