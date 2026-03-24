@@ -6,9 +6,28 @@ import os
 import shutil
 import tempfile
 import uuid
+import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+
+OUTBOX_DEFAULT_MAX_RETRIES = 8
+
+
+def _compute_outbox_dedupe_hash(
+    *,
+    channel: str,
+    conversation_id: str,
+    message: str,
+    attachments: List[Dict[str, Any]],
+) -> str:
+    dedupe_basis = {
+        "channel": str(channel or ""),
+        "conversation_id": str(conversation_id or ""),
+        "message": str(message or ""),
+        "attachments": attachments,
+    }
+    return hashlib.sha256(json.dumps(dedupe_basis, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def now_iso() -> str:
@@ -64,6 +83,10 @@ def get_outbox_dir() -> Path:
     return get_cheapclaw_root() / "outbox"
 
 
+def get_deadletter_outbox_dir() -> Path:
+    return get_cheapclaw_root() / "outbox_deadletter"
+
+
 def get_task_events_dir() -> Path:
     return get_user_data_root() / "runtime" / "task_events"
 
@@ -101,6 +124,7 @@ def ensure_cheapclaw_layout() -> None:
         get_panel_path().parent,
         get_panel_backups_dir(),
         get_outbox_dir(),
+        get_deadletter_outbox_dir(),
         get_task_events_dir(),
         get_task_skills_root(),
         get_channels_root(),
@@ -729,14 +753,36 @@ def queue_outbound_message(
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     ensure_cheapclaw_layout()
+    normalized_message = str(message or "").strip()
+    normalized_attachments = attachments or []
+    metadata_payload = dict(metadata or {})
+    metadata_payload.setdefault("retry_count", 0)
+    metadata_payload.setdefault("max_retries", OUTBOX_DEFAULT_MAX_RETRIES)
+    metadata_payload.setdefault("next_retry_at", now_iso())
+    dedupe_hash = _compute_outbox_dedupe_hash(
+        channel=str(channel or ""),
+        conversation_id=str(conversation_id or ""),
+        message=normalized_message,
+        attachments=normalized_attachments,
+    )
+    metadata_payload.setdefault("dedupe_hash", dedupe_hash)
+
+    for existing in list_outbox_events():
+        existing_metadata = existing.get("metadata")
+        if not isinstance(existing_metadata, dict):
+            continue
+        if str(existing_metadata.get("dedupe_hash") or "") == dedupe_hash:
+            existing["deduplicated"] = True
+            return existing
+
     event_id = f"out_{uuid.uuid4().hex[:12]}"
     payload = {
         "event_id": event_id,
         "channel": channel,
         "conversation_id": conversation_id,
-        "message": str(message or "").strip(),
-        "attachments": attachments or [],
-        "metadata": metadata or {},
+        "message": normalized_message,
+        "attachments": normalized_attachments,
+        "metadata": metadata_payload,
         "created_at": now_iso(),
     }
     _atomic_write_json(get_outbox_dir() / f"{event_id}.json", payload)
@@ -770,6 +816,33 @@ def ack_outbox_event(event_id: str) -> None:
         path.unlink()
     except FileNotFoundError:
         pass
+
+
+def save_outbox_event(payload: Dict[str, Any]) -> Dict[str, Any]:
+    ensure_cheapclaw_layout()
+    event_id = str(payload.get("event_id") or "").strip()
+    if not event_id:
+        raise ValueError("outbox event_id is required")
+    normalized = dict(payload)
+    normalized["event_id"] = event_id
+    normalized.setdefault("created_at", now_iso())
+    if not isinstance(normalized.get("metadata"), dict):
+        normalized["metadata"] = {}
+    _atomic_write_json(get_outbox_dir() / f"{event_id}.json", normalized)
+    return normalized
+
+
+def move_outbox_event_to_deadletter(event: Dict[str, Any], *, reason: str) -> Dict[str, Any]:
+    ensure_cheapclaw_layout()
+    event_id = str(event.get("event_id") or "").strip()
+    if not event_id:
+        return {}
+    archived = dict(event)
+    archived["deadletter_reason"] = str(reason or "").strip()
+    archived["deadletter_at"] = now_iso()
+    _atomic_write_json(get_deadletter_outbox_dir() / f"{event_id}.json", archived)
+    ack_outbox_event(event_id)
+    return archived
 
 
 def emit_task_event(payload: Dict[str, Any]) -> Dict[str, Any]:

@@ -91,6 +91,18 @@ cheapclaw up
 
 `cheapclaw init` creates `fleet.manifest.json` in the default location.
 
+### Option C: run with Docker (lightweight)
+
+```bash
+docker compose up -d --build
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8787/dashboard
+```
+
 ## Default Paths
 
 By default, CheapClaw stores its runtime files under:

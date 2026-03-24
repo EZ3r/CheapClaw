@@ -93,6 +93,18 @@ cheapclaw up
 
 `cheapclaw init` 会在默认位置生成 `fleet.manifest.json` 模板。
 
+### 方案 C：使用 Docker 运行（轻量）
+
+```bash
+docker compose up -d --build
+```
+
+启动后打开：
+
+```text
+http://127.0.0.1:8787/dashboard
+```
+
 ## 默认目录
 
 CheapClaw 默认把运行文件放在：

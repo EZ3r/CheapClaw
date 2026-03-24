@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import hmac
 import json
+import logging
 import mimetypes
 import os
 import re
@@ -24,6 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
@@ -56,6 +58,8 @@ try:
         list_task_events,
         load_fleet_config,
         load_monitor_instructions_for_root,
+        move_outbox_event_to_deadletter,
+        OUTBOX_DEFAULT_MAX_RETRIES,
         load_plans,
         now_iso,
         pending_monitor_instruction_count,
@@ -66,6 +70,7 @@ try:
         save_plans,
         set_task_visible_skills,
         _short_text,
+        save_outbox_event,
         slugify,
         update_conversation_task,
     )
@@ -90,6 +95,8 @@ except ImportError:
         list_task_events,
         load_fleet_config,
         load_monitor_instructions_for_root,
+        move_outbox_event_to_deadletter,
+        OUTBOX_DEFAULT_MAX_RETRIES,
         load_plans,
         now_iso,
         pending_monitor_instruction_count,
@@ -100,6 +107,7 @@ except ImportError:
         save_plans,
         set_task_visible_skills,
         _short_text,
+        save_outbox_event,
         slugify,
         update_conversation_task,
     )
@@ -125,6 +133,14 @@ APP_TOOLS_ROOT = APP_ROOT / "tools_library"
 APP_SKILLS_ROOT = APP_ROOT / "skills"
 APP_WEB_ROOT = APP_ROOT / "web"
 SERVICE_LOG_PATH: Optional[Path] = None
+SERVICE_LOG_MAX_BYTES = 5 * 1024 * 1024
+SERVICE_LOG_BACKUP_COUNT = 3
+OUTBOX_BASE_BACKOFF_SECONDS = 5
+OUTBOX_MAX_BACKOFF_SECONDS = 300
+LOGGER = logging.getLogger("cheapclaw.service")
+LOGGER.setLevel(logging.INFO)
+LOGGER.propagate = False
+LOGGER_INITIALIZED = False
 ACTIVE_SERVICE: Optional["CheapClawService"] = None
 FINAL_OUTPUT_HOOK_CALLBACK = f"{(APP_ROOT / 'cheapclaw_hooks.py').resolve()}:on_tool_event"
 CHEAPCLAW_SYSTEM_BLOCK_START = "<cheapclaw_system_结构>"
@@ -171,17 +187,45 @@ def _upsert_marked_block(content: str, *, start_tag: str, end_tag: str, block_te
     return original.rstrip() + "\n\n" + managed + "\n"
 
 
-def _log(message: str) -> None:
-    line = f"[CheapClaw {datetime.now().astimezone().isoformat(timespec='seconds')}] {message}"
-    print(line, flush=True)
-    global SERVICE_LOG_PATH
-    if SERVICE_LOG_PATH is not None:
+def _configure_service_logger(log_path: Path, *, max_bytes: int, backup_count: int) -> None:
+    global LOGGER_INITIALIZED
+    if LOGGER_INITIALIZED:
+        return
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        formatter = logging.Formatter(
+            fmt="[CheapClaw %(asctime)s] %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S%z",
+        )
+        file_handler = RotatingFileHandler(
+            str(log_path),
+            maxBytes=max(1024, int(max_bytes)),
+            backupCount=max(1, int(backup_count)),
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(formatter)
+        LOGGER.handlers.clear()
+        LOGGER.addHandler(file_handler)
+        # CHEAPCLAW_LOG_STDOUT=0 disables duplicate stdout logs while keeping file logs.
+        if str(os.environ.get("CHEAPCLAW_LOG_STDOUT", "1")).strip().lower() not in {"0", "false", "no"}:
+            stream_handler = logging.StreamHandler(sys.stdout)
+            stream_handler.setFormatter(formatter)
+            LOGGER.addHandler(stream_handler)
+        LOGGER_INITIALIZED = True
+    except Exception:
+        LOGGER_INITIALIZED = False
+
+
+def _log(message: str, *, level: str = "info") -> None:
+    text = str(message or "")
+    if LOGGER_INITIALIZED:
         try:
-            SERVICE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-            with open(SERVICE_LOG_PATH, "a", encoding="utf-8") as fh:
-                fh.write(line + "\n")
+            getattr(LOGGER, level, LOGGER.info)(text)
+            return
         except Exception:
             pass
+    line = f"[CheapClaw {datetime.now().astimezone().isoformat(timespec='seconds')}] {text}"
+    print(line, flush=True)
 
 
 def _load_json(path: Path, default: Any) -> Any:
@@ -209,6 +253,8 @@ def _load_cheapclaw_app_config_example() -> Dict[str, Any]:
             "default_mcp_servers": [],
             "feishu_mode": "long_connection",
             "service_log_file": "cheapclaw_service.log",
+            "service_log_max_bytes": 5242880,
+            "service_log_backup_count": 3,
         },
     }
     return _load_json(ASSET_APP_CONFIG_EXAMPLE_PATH, fallback)
@@ -231,6 +277,14 @@ def _extract_cheapclaw_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
         "default_mcp_servers": [item for item in default_mcp_servers if isinstance(item, dict)],
         "feishu_mode": str(cheapclaw.get("feishu_mode", example_cheapclaw.get("feishu_mode", "long_connection")) or example_cheapclaw.get("feishu_mode", "long_connection")).strip(),
         "service_log_file": str(cheapclaw.get("service_log_file", example_cheapclaw.get("service_log_file", "cheapclaw_service.log")) or example_cheapclaw.get("service_log_file", "cheapclaw_service.log")).strip(),
+        "service_log_max_bytes": max(
+            1024,
+            int(cheapclaw.get("service_log_max_bytes", SERVICE_LOG_MAX_BYTES) or SERVICE_LOG_MAX_BYTES),
+        ),
+        "service_log_backup_count": max(
+            1,
+            int(cheapclaw.get("service_log_backup_count", SERVICE_LOG_BACKUP_COUNT) or SERVICE_LOG_BACKUP_COUNT),
+        ),
     }
 
 
@@ -1976,6 +2030,11 @@ class CheapClawService:
         self.runtime = runtime
         global SERVICE_LOG_PATH
         SERVICE_LOG_PATH = Path(runtime["logs_dir"]) / cheapclaw_settings["service_log_file"]
+        _configure_service_logger(
+            SERVICE_LOG_PATH,
+            max_bytes=int(cheapclaw_settings.get("service_log_max_bytes", SERVICE_LOG_MAX_BYTES)),
+            backup_count=int(cheapclaw_settings.get("service_log_backup_count", SERVICE_LOG_BACKUP_COUNT)),
+        )
         self.panel_store = CheapClawPanelStore(self.paths, history_preview_limit=history_preview_limit)
         self.default_agent_system = default_agent_system
         self.default_agent_name = default_agent_name
@@ -3219,6 +3278,20 @@ class CheapClawService:
         with self._runtime_scope():
             results = []
             for event in list_outbox_events():
+                metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
+                max_retries = max(0, int(metadata.get("max_retries", OUTBOX_DEFAULT_MAX_RETRIES) or OUTBOX_DEFAULT_MAX_RETRIES))
+                retry_count = max(0, int(metadata.get("retry_count", 0) or 0))
+                next_retry_at = parse_iso(str(metadata.get("next_retry_at") or ""))
+                now_dt = datetime.now().astimezone()
+                if next_retry_at and next_retry_at > now_dt:
+                    results.append(
+                        {
+                            "event_id": event.get("event_id"),
+                            "status": "deferred",
+                            "next_retry_at": next_retry_at.isoformat(timespec="seconds"),
+                        }
+                    )
+                    continue
                 channel = str(event.get("channel") or "").strip()
                 adapter = self.adapters.get(channel)
                 if adapter is None:
@@ -3243,7 +3316,41 @@ class CheapClawService:
                     )
                     results.append({"event_id": event.get("event_id"), "status": "success", "remote_id": remote_id})
                 else:
-                    results.append({"event_id": event.get("event_id"), "status": "error", "error": remote_id})
+                    retry_count += 1
+                    if retry_count > max_retries:
+                        move_outbox_event_to_deadletter(event, reason=str(remote_id or "max retries exceeded"))
+                        _log(
+                            f"outbox event moved to deadletter: event_id={event.get('event_id')} "
+                            f"channel={channel} retries={retry_count} reason={remote_id}",
+                            level="warning",
+                        )
+                        results.append(
+                            {
+                                "event_id": event.get("event_id"),
+                                "status": "deadletter",
+                                "error": str(remote_id),
+                                "retry_count": retry_count,
+                            }
+                        )
+                        continue
+                    # Exponential backoff by retry_count=1,2,3... => 5s,10s,20s,40s... capped at 300s.
+                    backoff_seconds = min(
+                        OUTBOX_MAX_BACKOFF_SECONDS,
+                        OUTBOX_BASE_BACKOFF_SECONDS * (2 ** max(0, retry_count - 1)),
+                    )
+                    metadata["retry_count"] = retry_count
+                    metadata["next_retry_at"] = (now_dt + timedelta(seconds=backoff_seconds)).isoformat(timespec="seconds")
+                    event["metadata"] = metadata
+                    save_outbox_event(event)
+                    results.append(
+                        {
+                            "event_id": event.get("event_id"),
+                            "status": "error",
+                            "error": remote_id,
+                            "retry_count": retry_count,
+                            "next_retry_at": metadata["next_retry_at"],
+                        }
+                    )
             return results
 
     def poll_channels(self) -> List[Dict[str, Any]]:
